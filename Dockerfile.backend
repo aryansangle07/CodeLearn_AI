@@ -1,0 +1,43 @@
+# Multi-stage Dockerfile for CodeLearn AI FastAPI Backend
+FROM python:3.11-slim as builder
+
+WORKDIR /app
+
+# Install build dependencies and libgomp1 for FAISS CPU execution
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Final Runtime Image
+FROM python:3.11-slim as runner
+
+WORKDIR /app
+
+# Install runtime library dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy installed python packages from builder
+COPY --from=builder /root/.local /root/.local
+ENV PATH=/root/.local/bin:$PATH
+ENV PYTHONUNBUFFERED=1
+
+# Copy source code and docs
+COPY . /app
+
+# Expose FastAPI port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+  CMD curl -f http://localhost:8000/health || exit 1
+
+# Start FastAPI application
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

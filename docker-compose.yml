@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: codelearn_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-codelearn}
+      POSTGRES_USER: ${POSTGRES_USER:-codelearn_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-codelearn_secure_pass}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-codelearn_user} -d ${POSTGRES_DB:-codelearn}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: codelearn_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-codelearn_user}:${POSTGRES_PASSWORD:-codelearn_secure_pass}@db:5432/${POSTGRES_DB:-codelearn}
+      - INDEX_STORAGE_DIR=/app/indexes
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
+      - LLM_MODEL=${LLM_MODEL:-qwen/qwen3.8-27b}
+      - SEED_DEMO_REPOS=${SEED_DEMO_REPOS:-false}
+    ports:
+      - "8000:8000"
+    volumes:
+      - index_data:/app/indexes
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: codelearn_frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      - API_BASE_URL=http://backend:8000
+    ports:
+      - "8501:8501"
+
+volumes:
+  pgdata:
+    driver: local
+  index_data:
+    driver: local

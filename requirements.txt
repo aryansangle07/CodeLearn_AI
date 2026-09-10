@@ -1,0 +1,25 @@
+# CodeLearn AI Production Dependencies
+fastapi==0.111.0
+uvicorn==0.29.0
+pydantic==2.7.1
+pydantic-settings==2.2.1
+sqlalchemy==2.0.30
+requests==2.34.2
+httpx==0.27.0
+python-dotenv==1.0.1
+python-multipart==0.0.32
+PyYAML==6.0.3
+
+# Streamlit Frontend
+streamlit==1.35.0
+
+# AI, Embeddings & Semantic Retrieval
+google-genai==1.0.0
+groq==0.8.0
+langgraph==0.0.60
+langchain-core==0.2.1
+sentence-transformers==2.7.0
+faiss-cpu>=1.7.4
+rank-bm25==0.2.2
+tree-sitter==0.21.3
+numpy==1.26.4

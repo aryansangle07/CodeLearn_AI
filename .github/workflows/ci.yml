@@ -1,0 +1,58 @@
+name: CodeLearn AI CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    name: Automated Regression Suite & Quality Gates
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: codelearn_test
+          POSTGRES_USER: codelearn_user
+          POSTGRES_PASSWORD: codelearn_secure_pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgomp1
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Full Pytest Regression Suite
+        env:
+          DATABASE_URL: postgresql://codelearn_user:codelearn_secure_pass@localhost:5432/codelearn_test
+          INDEX_STORAGE_DIR: ./test_indexes
+        run: |
+          pytest -v --tb=short
+
+      - name: Validate Docker Compose Configuration
+        run: |
+          docker compose config
