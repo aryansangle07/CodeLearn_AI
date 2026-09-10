@@ -28,7 +28,7 @@ Try the live application hosted on Streamlit Cloud:
 - **Repository Health & Runnability Diagnostics:** Heuristically assesses whether a project is `RUNNABLE` 🟢, `PARTIALLY_RUNNABLE` 🟡, or `ANALYSIS_ONLY` 🔴 based on READMEs, dependency manifests, and entry points.
 - **Hybrid Dense-Sparse Retrieval:** Combines FAISS `IndexFlatIP` (`all-MiniLM-L6-v2`, 384d) with code-tokenized `BM25Okapi` via Reciprocal Rank Fusion ($k=60$) with exact symbol score boosting ($1.5\times$).
 - **Deterministic 4-Node LangGraph Pipeline:** Multi-agent state machine managing intent classification, hybrid retrieval, grounded answer generation within `<code_context>` XML tags, and backticked citation verification.
-- **Pre-Seeded Demo Repositories & Auto-Cleanup:** Pre-indexes 3 curated, developer-friendly repositories (`pallets/click`, `psf/requests`, `encode/starlette`) protected by `is_demo = True`. Automatically purges ephemeral user-added session repositories via a TTL background cleaner.
+- **1-Click Quick-Try & Dynamic Live Ingestion:** Features a 1-click preset (`encode/starlette`) for instant live demonstration alongside on-demand ingestion for any public GitHub repository URL. Automatically cleans up session repositories with TTL janitor routines.
 - **Interactive Streamlit UI & FastAPI REST Gateway:** Real-time ingestion progress tracking, runnability breakdowns, and conversational Q&A with backticked source inspection.
 
 ---
@@ -118,21 +118,16 @@ cp .env.example .env
 # 4. Start the application
 streamlit run app.py
 ```
-*(Streamlit automatically spawns the FastAPI backend in a background daemon on port 8000).*
+*(Streamlit automatically connects to the FastAPI ASGI in-process backend with SQLite fallback).*
 
 ---
 
-## 📦 Pre-Seeded Demo Repositories
+## ⚡ 1-Click Quick-Start Preset & Live Repositories
 
-CodeLearn AI includes built-in demo repositories pre-configured for evaluation:
-1. **`encode/starlette`** — ASGI framework showcasing async AST routing and middleware structures.
-2. **`pallets/click`** — Composable CLI toolkit showcasing decorator command trees and docstrings.
-3. **`psf/requests`** — Python HTTP library showcasing modular architectures and sessions.
-
-**How to Seed Repositories Locally:**
-```bash
-python seed_repos.py
-```
+CodeLearn AI provides instant live evaluation options:
+1. **1-Click Preset (`encode/starlette`)**: Click the sidebar or hero button to parse and index Starlette's ASGI architecture live in ~6–8 seconds.
+2. **Custom Repository Query Bar**: Paste any public GitHub URL (e.g. `https://github.com/pallets/click` or `https://github.com/psf/requests`) to run the full zero-code-execution ingestion pipeline.
+3. **Session Management**: Switch between active repositories, view real-time runnability health scores, and query code with verified citations.
 
 ---
 
