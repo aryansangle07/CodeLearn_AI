@@ -25,25 +25,13 @@ from worker import ingest_repository_worker
 
 logger = logging.getLogger(__name__)
 
-# Curated List of Demo Repositories:
-# 1. encode/starlette - Python async framework with clean class & middleware AST hierarchies.
-# 2. pallets/click - Composable CLI framework with decorators and command trees.
-# 3. psf/requests - Gold-standard Python HTTP library with modular architecture.
+# Single Curated Trial Repository:
+# encode/starlette - Python async framework with clean class & middleware AST hierarchies.
 DEMO_REPOSITORIES: List[Dict[str, str]] = [
     {
         "url": "https://github.com/encode/starlette",
         "branch": "master",
         "description": "Lightweight ASGI framework/toolkit showcasing async AST & middleware structures.",
-    },
-    {
-        "url": "https://github.com/pallets/click",
-        "branch": "main",
-        "description": "Composable CLI package showcasing decorators, command trees, and docstring chunks.",
-    },
-    {
-        "url": "https://github.com/psf/requests",
-        "branch": "main",
-        "description": "Standard Python HTTP library showcasing clean modular architecture and sessions.",
     },
 ]
 

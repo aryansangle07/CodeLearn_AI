@@ -82,7 +82,7 @@ class Repository(Base):
 
 
 def get_engine(database_url: str = None):
-    """Creates a SQLAlchemy engine configured for PostgreSQL or SQLite (with auto-fallback)."""
+    """Creates a SQLAlchemy engine configured for PostgreSQL or SQLite (testing/cloud)."""
     if database_url is None:
         from config import get_settings
         database_url = get_settings().DATABASE_URL
@@ -95,23 +95,13 @@ def get_engine(database_url: str = None):
             connect_args={"check_same_thread": False},
         )
 
-    # Check if psycopg2 driver is present for postgresql:// URLs; fallback to SQLite if missing
-    try:
-        import psycopg2
-        return create_engine(
-            database_url,
-            pool_size=10,
-            max_overflow=20,
-            pool_timeout=30,
-            pool_pre_ping=True,
-        )
-    except (ImportError, Exception):
-        import os
-        os.makedirs("./data", exist_ok=True)
-        return create_engine(
-            "sqlite:///./data/codelearn_ai.db",
-            connect_args={"check_same_thread": False},
-        )
+    return create_engine(
+        database_url,
+        pool_size=10,
+        max_overflow=20,
+        pool_timeout=30,
+        pool_pre_ping=True,
+    )
 
 
 def get_session_factory(engine=None) -> sessionmaker:

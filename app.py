@@ -1,7 +1,12 @@
+import os
 import time
 from typing import Any, Dict, List, Optional
 import httpx
 import streamlit as st
+
+# Ensure SQLite is default for zero-dependency standalone Streamlit Cloud deployments
+if "DATABASE_URL" not in os.environ or not os.environ["DATABASE_URL"]:
+    os.environ["DATABASE_URL"] = "sqlite:///./data/codelearn_ai.db"
 
 # Page Configuration
 st.set_page_config(
