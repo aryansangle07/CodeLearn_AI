@@ -76,11 +76,13 @@ def seed_single_repository(repo_info: Dict[str, str], engine=None) -> bool:
         existing = session.query(Repository).filter(
             Repository.owner == owner,
             Repository.name == name,
-            Repository.commit_sha == commit_sha,
+        ).order_by(
+            (Repository.status == IngestionStatus.INDEXED).desc(),
+            Repository.created_at.desc(),
         ).first()
 
         if existing and existing.status == IngestionStatus.INDEXED:
-            logger.info(f"[SEED] Demo repository '{owner}/{name}' ({commit_sha[:7]}) is already indexed. Skipping.")
+            logger.info(f"[SEED] Demo repository '{owner}/{name}' is already indexed. Skipping.")
             return True
 
         if existing:

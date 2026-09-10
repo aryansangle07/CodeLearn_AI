@@ -75,28 +75,45 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-API_BASE_URL = "http://localhost:8000"
+# Backend Client Initialization (In-Process ASGI for Streamlit Cloud & Standalone Deployment)
+@st.cache_resource
+def get_backend_client():
+    """Initializes and caches the in-process FastAPI ASGI client with lifecycle management."""
+    from main import app as fastapi_app
+    from fastapi.testclient import TestClient
+    client = TestClient(fastapi_app)
+    client.__enter__()
+    return client
 
 
 def fetch_api(endpoint: str, method: str = "GET", json_data: Optional[Dict[str, Any]] = None):
-    """Helper to communicate with FastAPI backend."""
-    url = f"{API_BASE_URL}{endpoint}"
+    """Communicates with FastAPI backend via in-process ASGI client or HTTP fallback."""
+    # 1. Direct In-Process ASGI execution (fast, zero socket errors on Streamlit Cloud)
     try:
-        with httpx.Client(timeout=60.0) as client:
-            if method == "POST":
-                resp = client.post(url, json=json_data)
-            elif method == "DELETE":
-                resp = client.delete(url)
-            elif method == "PUT":
-                resp = client.put(url, json=json_data)
-            else:
-                resp = client.get(url)
-            if resp.status_code in (200, 201, 202):
-                return resp.json()
-            else:
-                return {"error": f"HTTP {resp.status_code}: {resp.text}"}
-    except Exception as e:
-        return {"error": f"Failed to connect to backend: {str(e)}"}
+        client = get_backend_client()
+        if method == "POST":
+            resp = client.post(endpoint, json=json_data)
+        elif method == "DELETE":
+            resp = client.delete(endpoint)
+        elif method == "PUT":
+            resp = client.put(endpoint, json=json_data)
+        else:
+            resp = client.get(endpoint)
+
+        if resp.status_code in (200, 201, 202):
+            return resp.json()
+        elif resp.status_code == 403:
+            return {"error": resp.json().get("detail", "Operation forbidden.")}
+        elif resp.status_code == 404:
+            return {"error": resp.json().get("detail", "Resource not found.")}
+        else:
+            try:
+                err_detail = resp.json().get("detail", resp.text)
+            except Exception:
+                err_detail = resp.text
+            return {"error": f"HTTP {resp.status_code}: {err_detail}"}
+    except Exception as exc:
+        return {"error": f"Backend execution error: {str(exc)}"}
 
 
 # Session State Initialization
@@ -160,11 +177,13 @@ with st.sidebar:
                                 break
 
     st.markdown("---")
-    st.markdown("### 📂 Indexed Repositories")
+    st.markdown("### 📂 Ingested Repositories")
     repos_list = fetch_api("/api/repositories")
 
     if isinstance(repos_list, list) and repos_list:
         indexed_repos_app = [r for r in repos_list if r.get("status") == "INDEXED"]
+        pending_repos_app = [r for r in repos_list if r.get("status") != "INDEXED"]
+
         if indexed_repos_app:
             repo_options = {}
             for r in indexed_repos_app:
@@ -190,12 +209,13 @@ with st.sidebar:
             st.session_state.selected_repo_id = repo_options[selected_label]
             active_repo = next(r for r in indexed_repos_app if r["id"] == st.session_state.selected_repo_id)
 
-            # Details card with Delete Button inside the container
+            # Details card with Protected Badge for Demo or Delete Button for Session Repos
             with st.container(border=True):
                 is_demo_repo = active_repo.get("is_demo", False)
                 if is_demo_repo:
                     st.markdown(f"**Active:** `{active_repo['owner']}/{active_repo['name']}` ⭐ *(Default Demo)*")
-                    st.caption(f"📁 Files: {active_repo.get('total_files', 0)} | 🔖 Commit: `{active_repo.get('commit_sha', '')[:7]}` | 🛡️ Protected")
+                    st.caption(f"📁 Files: {active_repo.get('total_files', 0)} | 🔖 Commit: `{active_repo.get('commit_sha', '')[:7]}` | 🛡️ **Protected (Q&A Enabled)**")
+                    st.info("🛡️ This demo repository is pre-indexed and protected from deletion. You can freely query and inspect its architecture.")
                 elif st.session_state.confirm_del_repo_id != active_repo["id"]:
                     st.markdown(f"**Active:** `{active_repo['owner']}/{active_repo['name']}` 👤 *(User Session)*")
                     st.caption(f"📁 Files: {active_repo.get('total_files', 0)} | 🔖 Commit: `{active_repo.get('commit_sha', '')[:7]}` | ⚡ Health: `{active_repo.get('runnability_score', '')}`")
@@ -245,8 +265,19 @@ with st.sidebar:
                             st.rerun()
         else:
             st.info("No repositories have completed indexing yet.")
+
+        # Display in-flight auto-seeding or ingestion jobs
+        if pending_repos_app:
+            st.markdown("---")
+            st.caption("⏳ **In-Flight Background Ingestion:**")
+            for pr in pending_repos_app:
+                st.info(f"⚙️ **{pr['owner']}/{pr['name']}**: `{pr.get('status')}`")
+            if st.button("🔄 Refresh Repository List", key="btn_refresh_sidebar", use_container_width=True):
+                st.rerun()
     else:
-        st.info("No repositories ingested yet.")
+        st.info("⚙️ Initializing repository storage...")
+        if st.button("🔄 Refresh", key="btn_init_refresh", use_container_width=True):
+            st.rerun()
 
 
 # --- MAIN CONTENT AREA ---

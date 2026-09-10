@@ -52,9 +52,19 @@ def ingest_repository_worker(repository_id: str, session_factory=None) -> None:
         )
         extracted_repo_dir = extracted_info.repo_dir
 
-        # Update commit sha if resolved
+        # Update commit sha if resolved and clean any stale duplicate records
         if extracted_info.commit_sha:
-            repo.commit_sha = extracted_info.commit_sha
+            if extracted_info.commit_sha != repo.commit_sha:
+                stale_dupes = session.query(Repository).filter(
+                    Repository.owner == repo.owner,
+                    Repository.name == repo.name,
+                    Repository.commit_sha == extracted_info.commit_sha,
+                    Repository.id != repo.id,
+                ).all()
+                for sd in stale_dupes:
+                    session.delete(sd)
+                session.flush()
+                repo.commit_sha = extracted_info.commit_sha
 
         # Determine index storage directory
         index_dir = os.path.abspath(

@@ -47,8 +47,8 @@ class Settings(BaseSettings):
     GEMINI_RPM_LIMIT: int = 15
     GEMINI_RPD_LIMIT: int = 1500
 
-    # Auto-Seed Demo Repositories (Opt-In Flag)
-    SEED_DEMO_REPOS: bool = False
+    # Auto-Seed Demo Repositories (Enabled by default for seamless instant demo)
+    SEED_DEMO_REPOS: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",
