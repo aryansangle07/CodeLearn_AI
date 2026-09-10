@@ -78,7 +78,16 @@ st.markdown(
 # Backend Client Initialization (In-Process ASGI for Streamlit Cloud & Standalone Deployment)
 @st.cache_resource
 def get_backend_client():
-    """Initializes and caches the in-process FastAPI ASGI client with lifecycle management."""
+    """Initializes and caches the in-process FastAPI ASGI client with lifecycle management and DB seeding."""
+    try:
+        from db import get_engine, init_db
+        from seed_service import run_demo_seed_pipeline
+        engine = get_engine()
+        init_db(engine)
+        run_demo_seed_pipeline(background=False, engine=engine)
+    except Exception:
+        pass
+
     from main import app as fastapi_app
     from fastapi.testclient import TestClient
     client = TestClient(fastapi_app)
@@ -88,7 +97,6 @@ def get_backend_client():
 
 def fetch_api(endpoint: str, method: str = "GET", json_data: Optional[Dict[str, Any]] = None):
     """Communicates with FastAPI backend via in-process ASGI client or HTTP fallback."""
-    # 1. Direct In-Process ASGI execution (fast, zero socket errors on Streamlit Cloud)
     try:
         client = get_backend_client()
         if method == "POST":
@@ -185,16 +193,56 @@ with st.sidebar:
 
     repos_list = fetch_api("/api/repositories")
 
-    # If database has zero records or missing demo repos on cold start, silently seed them
-    if not isinstance(repos_list, list) or len(repos_list) == 0 or not any(r.get("is_demo") for r in repos_list):
-        fetch_api("/api/seed-demos", method="POST")
-        repos_list = fetch_api("/api/repositories")
+    # If backend returned an error or empty list, query direct DB / seed
+    if not isinstance(repos_list, list) or len(repos_list) == 0:
+        try:
+            from db import get_engine, get_session_factory, Repository
+            from seed_service import run_demo_seed_pipeline
+            engine = get_engine()
+            run_demo_seed_pipeline(background=False, engine=engine)
+            SessionLocal = get_session_factory(engine)
+            session = SessionLocal()
+            db_repos = session.query(Repository).all()
+            repos_list = [
+                {
+                    "id": r.id,
+                    "url": r.url,
+                    "owner": r.owner,
+                    "name": r.name,
+                    "branch": r.branch,
+                    "commit_sha": r.commit_sha,
+                    "status": r.status.value if hasattr(r.status, "value") else str(r.status),
+                    "total_files": r.total_files or 0,
+                    "total_lines": r.total_lines or 0,
+                    "total_size_bytes": r.total_size_bytes or 0,
+                    "runnability_score": r.runnability_score.value if hasattr(r.runnability_score, "value") else str(r.runnability_score),
+                    "is_demo": r.is_demo,
+                }
+                for r in db_repos
+            ]
+            session.close()
+        except Exception:
+            repos_list = []
 
     indexed_repos_app = [r for r in repos_list if r.get("status") == "INDEXED"] if isinstance(repos_list, list) else []
     pending_repos_app = [r for r in repos_list if r.get("status") != "INDEXED"] if isinstance(repos_list, list) else []
 
     demo_repos = [r for r in indexed_repos_app if r.get("is_demo") or r.get("owner") in ["encode", "pallets", "psf"]]
     user_repos = [r for r in indexed_repos_app if not r.get("is_demo") and r.get("owner") not in ["encode", "pallets", "psf"]]
+
+    # If demo_repos is empty, ensure the 3 curated demo repositories are populated
+    if not demo_repos:
+        try:
+            from seed_service import run_demo_seed_pipeline
+            from db import get_engine
+            run_demo_seed_pipeline(background=False, engine=get_engine())
+            repos_list = fetch_api("/api/repositories")
+            if isinstance(repos_list, list):
+                indexed_repos_app = [r for r in repos_list if r.get("status") == "INDEXED"]
+                demo_repos = [r for r in indexed_repos_app if r.get("is_demo") or r.get("owner") in ["encode", "pallets", "psf"]]
+                user_repos = [r for r in indexed_repos_app if not r.get("is_demo") and r.get("owner") not in ["encode", "pallets", "psf"]]
+        except Exception:
+            pass
 
     # Default selection to first demo repository if not set
     if not st.session_state.selected_repo_id and demo_repos:
@@ -332,11 +380,9 @@ st.markdown(
 )
 
 # Validate that selected_repo_id is among current indexed repos
-repos_list_main = fetch_api("/api/repositories")
-indexed_ids = [r["id"] for r in repos_list_main if r.get("status") == "INDEXED"] if isinstance(repos_list_main, list) else []
-
-if st.session_state.selected_repo_id not in indexed_ids:
-    st.session_state.selected_repo_id = indexed_ids[0] if indexed_ids else None
+indexed_ids = [r["id"] for r in indexed_repos_app]
+if st.session_state.selected_repo_id not in indexed_ids and demo_repos:
+    st.session_state.selected_repo_id = demo_repos[0]["id"]
 
 if not st.session_state.selected_repo_id:
     st.warning("👈 Please enter a GitHub repository URL in the sidebar to begin ingestion or select an indexed repo.")
@@ -345,8 +391,38 @@ else:
     summary = fetch_api(f"/api/repositories/{active_repo_id}/summary")
 
     if "error" in summary:
+        # If API returned error, attempt direct DB summary
+        try:
+            from db import get_engine, get_session_factory, Repository
+            from main import resolve_index_path
+            engine = get_engine()
+            SessionLocal = get_session_factory(engine)
+            session = SessionLocal()
+            r_obj = session.query(Repository).filter(Repository.id == active_repo_id).first()
+            if r_obj:
+                summary = {
+                    "id": r_obj.id,
+                    "url": r_obj.url,
+                    "owner": r_obj.owner,
+                    "name": r_obj.name,
+                    "branch": r_obj.branch,
+                    "commit_sha": r_obj.commit_sha,
+                    "status": r_obj.status.value if hasattr(r_obj.status, "value") else str(r_obj.status),
+                    "total_files": r_obj.total_files or 0,
+                    "total_lines": r_obj.total_lines or 0,
+                    "total_size_bytes": r_obj.total_size_bytes or 0,
+                    "language_distribution": r_obj.language_distribution or {},
+                    "runnability_score": r_obj.runnability_score.value if hasattr(r_obj.runnability_score, "value") else str(r_obj.runnability_score),
+                    "health_details": r_obj.health_details or {},
+                    "is_demo": r_obj.is_demo,
+                }
+            session.close()
+        except Exception:
+            pass
+
+    if "error" in summary:
         # Gracefully handle stale or deleted repository IDs
-        st.session_state.selected_repo_id = None
+        st.session_state.selected_repo_id = demo_repos[0]["id"] if demo_repos else None
         st.session_state.chat_history = []
         st.warning("👈 Repository not found or was removed. Please select an active repository from the sidebar.")
         time.sleep(0.5)
