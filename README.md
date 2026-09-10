@@ -17,7 +17,7 @@ CodeLearn AI is a production-grade developer platform designed for zero-code-exe
 ## 🌐 Live Interactive Demo
 
 Try the live application hosted on Streamlit Cloud:
-👉 **[https://codelearn-ai.streamlit.app](https://codelearn-ai.streamlit.app)**
+👉 **[https://codelearnai-lbsyydqmtlxxmuhsjka8nm.streamlit.app](https://codelearnai-lbsyydqmtlxxmuhsjka8nm.streamlit.app)**
 
 ---
 
