@@ -40,6 +40,18 @@ from worker import ingest_repository_worker
 from seed_service import run_demo_seed_pipeline
 
 
+def resolve_index_path(repo: Repository) -> str:
+    """Resolves index directory path reliably across Windows and Linux deployments."""
+    settings = get_settings()
+    expected_name = f"{repo.owner}_{repo.name}_{repo.commit_sha}"
+    local_path = os.path.abspath(os.path.join(settings.INDEX_STORAGE_DIR, expected_name))
+    if os.path.exists(local_path):
+        return local_path
+    if repo.index_storage_path and os.path.exists(repo.index_storage_path):
+        return repo.index_storage_path
+    return local_path
+
+
 def purge_expired_user_repositories(session: Session, max_age_hours: int = 2) -> int:
     """Purges non-demo user-added repositories older than max_age_hours."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
@@ -51,8 +63,9 @@ def purge_expired_user_repositories(session: Session, max_age_hours: int = 2) ->
     settings = get_settings()
     data_base_dir = os.path.dirname(os.path.abspath(settings.INDEX_STORAGE_DIR))
     for r in expired_repos:
-        if r.index_storage_path and os.path.exists(r.index_storage_path):
-            shutil.rmtree(r.index_storage_path, ignore_errors=True)
+        index_p = resolve_index_path(r)
+        if index_p and os.path.exists(index_p):
+            shutil.rmtree(index_p, ignore_errors=True)
         repo_extract_dir = os.path.join(data_base_dir, "repos", f"{r.owner}_{r.name}_{r.commit_sha}")
         if os.path.exists(repo_extract_dir):
             shutil.rmtree(repo_extract_dir, ignore_errors=True)
@@ -98,8 +111,8 @@ async def lifespan(app: FastAPI):
     finally:
         session.close()
 
-    # Trigger optional background demo repository seeding if enabled (SEED_DEMO_REPOS=True)
-    run_demo_seed_pipeline(background=True)
+    # Fast-load pre-indexed demo repositories synchronously (<0.05s) or trigger background
+    run_demo_seed_pipeline(background=False)
 
     yield
 
@@ -449,7 +462,8 @@ def query_repository(request: QueryRequest, db: Session = Depends(get_db)):
             detail=f"Repository is not ready for queries. Current status: {repo.status.value}",
         )
 
-    if not os.path.exists(repo.index_storage_path):
+    index_path = resolve_index_path(repo)
+    if not os.path.exists(index_path):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Index storage files are missing on disk.",
@@ -458,7 +472,7 @@ def query_repository(request: QueryRequest, db: Session = Depends(get_db)):
     # Execute deterministic LangGraph pipeline
     final_state = execute_query_pipeline(
         repository_id=repo.id,
-        index_dir=repo.index_storage_path,
+        index_dir=index_path,
         query=request.query,
     )
 

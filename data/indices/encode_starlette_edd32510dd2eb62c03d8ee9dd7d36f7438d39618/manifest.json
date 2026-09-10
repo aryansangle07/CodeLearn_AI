@@ -1,0 +1,10 @@
+{
+  "owner": "encode",
+  "name": "starlette",
+  "commit_sha": "edd32510dd2eb62c03d8ee9dd7d36f7438d39618",
+  "total_chunks": 2358,
+  "faiss_file": "faiss_index.bin",
+  "bm25_file": "bm25_index.pkl",
+  "metadata_file": "chunks_metadata.json",
+  "created_at": "2026-09-10T08:17:46.611435+00:00"
+}

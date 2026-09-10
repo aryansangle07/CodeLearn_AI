@@ -41,19 +41,22 @@ venv.bak/
 *.pem
 *.key
 
-# Local Data, Databases & FAISS Indexes
-data/
+# Local Data & Temporary Repositories
+data/repos/
+data/cache/
 indexes/
 test_indexes/
 docs/
 interview_guide.html
 *.html
-*.bin
-*.pkl
 *.db
 *.sqlite
 *.sqlite3
 codelearn.db
+
+# Ensure pre-indexed demo vector directories are included
+!data/indices/
+!data/indices/**
 
 # Unit Test & Coverage
 .pytest_cache/

@@ -1,0 +1,10 @@
+{
+  "owner": "pallets",
+  "name": "click",
+  "commit_sha": "6aabf099bfdd4c1e75fe8d0e0d4241372b988ab1",
+  "total_chunks": 2287,
+  "faiss_file": "faiss_index.bin",
+  "bm25_file": "bm25_index.pkl",
+  "metadata_file": "chunks_metadata.json",
+  "created_at": "2026-09-10T08:20:15.677123+00:00"
+}

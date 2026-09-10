@@ -1,0 +1,10 @@
+{
+  "owner": "psf",
+  "name": "requests",
+  "commit_sha": "5460f467b02e49471c0fd6cfc9ca0adab6351f98",
+  "total_chunks": 1536,
+  "faiss_file": "faiss_index.bin",
+  "bm25_file": "bm25_index.pkl",
+  "metadata_file": "chunks_metadata.json",
+  "created_at": "2026-08-26T16:54:28.152411+00:00"
+}

@@ -264,7 +264,10 @@ with st.sidebar:
                             time.sleep(0.5)
                             st.rerun()
         else:
-            st.info("No repositories have completed indexing yet.")
+            st.info("⚡ Pre-indexed demo repositories are loading... (Starlette, Click, Requests)")
+            with st.spinner("Indexing vector storage..."):
+                time.sleep(2.0)
+                st.rerun()
 
         # Display in-flight auto-seeding or ingestion jobs
         if pending_repos_app:
@@ -272,11 +275,12 @@ with st.sidebar:
             st.caption("⏳ **In-Flight Background Ingestion:**")
             for pr in pending_repos_app:
                 st.info(f"⚙️ **{pr['owner']}/{pr['name']}**: `{pr.get('status')}`")
-            if st.button("🔄 Refresh Repository List", key="btn_refresh_sidebar", use_container_width=True):
-                st.rerun()
+            time.sleep(2.0)
+            st.rerun()
     else:
-        st.info("⚙️ Initializing repository storage...")
-        if st.button("🔄 Refresh", key="btn_init_refresh", use_container_width=True):
+        st.info("⚙️ Initializing repository storage and pre-indexed demos...")
+        with st.spinner("Connecting to vector index..."):
+            time.sleep(2.0)
             st.rerun()
 
 
