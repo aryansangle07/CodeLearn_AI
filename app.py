@@ -180,6 +180,11 @@ with st.sidebar:
     st.markdown("### 📂 Ingested Repositories")
     repos_list = fetch_api("/api/repositories")
 
+    # If database has zero records on cold start, trigger instant fast-load
+    if not isinstance(repos_list, list) or len(repos_list) == 0:
+        seed_res = fetch_api("/api/seed-demos", method="POST")
+        repos_list = fetch_api("/api/repositories")
+
     if isinstance(repos_list, list) and repos_list:
         indexed_repos_app = [r for r in repos_list if r.get("status") == "INDEXED"]
         pending_repos_app = [r for r in repos_list if r.get("status") != "INDEXED"]
@@ -264,9 +269,8 @@ with st.sidebar:
                             time.sleep(0.5)
                             st.rerun()
         else:
-            st.info("⚡ Pre-indexed demo repositories are loading... (Starlette, Click, Requests)")
-            with st.spinner("Indexing vector storage..."):
-                time.sleep(2.0)
+            st.info("⚡ Demo repositories are initializing in the background...")
+            if st.button("🔄 Refresh Repositories", key="btn_manual_refresh", use_container_width=True):
                 st.rerun()
 
         # Display in-flight auto-seeding or ingestion jobs
@@ -275,13 +279,12 @@ with st.sidebar:
             st.caption("⏳ **In-Flight Background Ingestion:**")
             for pr in pending_repos_app:
                 st.info(f"⚙️ **{pr['owner']}/{pr['name']}**: `{pr.get('status')}`")
-            time.sleep(2.0)
-            st.rerun()
     else:
-        st.info("⚙️ Initializing repository storage and pre-indexed demos...")
-        with st.spinner("Connecting to vector index..."):
-            time.sleep(2.0)
-            st.rerun()
+        st.info("⚙️ Initializing repository storage...")
+        if st.button("🚀 Fast-Load Demo Repositories", key="btn_load_demos_manual", use_container_width=True):
+            with st.spinner("Loading pre-indexed repositories..."):
+                fetch_api("/api/seed-demos", method="POST")
+                st.rerun()
 
 
 # --- MAIN CONTENT AREA ---

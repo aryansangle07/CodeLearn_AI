@@ -167,6 +167,16 @@ def health_check(db: Session = Depends(get_db)):
 
 
 @app.post(
+    "/api/seed-demos",
+    tags=["Repositories"],
+)
+def trigger_seed_demos():
+    """Triggers immediate fast-load and seeding of curated demo repositories."""
+    run_demo_seed_pipeline(background=False)
+    return {"success": True, "message": "Demo repositories loaded successfully."}
+
+
+@app.post(
     "/api/repositories",
     response_model=RepositorySubmissionResponse,
     status_code=status.HTTP_202_ACCEPTED,

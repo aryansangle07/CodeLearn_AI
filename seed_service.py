@@ -69,10 +69,9 @@ def seed_single_repository(repo_info: Dict[str, str], engine=None) -> bool:
         return False
 
     try:
-        commit_sha = GitHubService.resolve_latest_commit_sha(owner, name, branch)
         settings = get_settings()
 
-        # Check if already indexed by owner/name in DB
+        # 1. Check if already indexed by owner/name in DB
         existing = session.query(Repository).filter(
             Repository.owner == owner,
             Repository.name == name,
@@ -85,7 +84,7 @@ def seed_single_repository(repo_info: Dict[str, str], engine=None) -> bool:
             logger.info(f"[SEED] Demo repository '{owner}/{name}' is already indexed in DB. Skipping.")
             return True
 
-        # Check if pre-built index directory already exists on disk
+        # 2. Check if pre-built index directory already exists on disk (Zero-Network Fast-Load)
         expected_indices = [
             d for d in os.listdir(settings.INDEX_STORAGE_DIR)
             if d.startswith(f"{owner}_{name}_") and os.path.exists(os.path.join(settings.INDEX_STORAGE_DIR, d, "faiss_index.bin"))
@@ -143,6 +142,13 @@ def seed_single_repository(repo_info: Dict[str, str], engine=None) -> bool:
                 session.commit()
                 logger.info(f"[SEED FAST-LOAD] Fast-loaded pre-indexed demo repository '{owner}/{name}' ({total_chunks} chunks).")
                 return True
+
+        # 3. Only if no local index exists on disk, attempt GitHub network ingestion
+        try:
+            commit_sha = GitHubService.resolve_latest_commit_sha(owner, name, branch)
+        except Exception as e:
+            logger.warning(f"[SEED WARNING] Could not resolve commit for '{url}': {e}. Skipping network ingestion.")
+            return False
 
         if existing:
             repo_id = existing.id
