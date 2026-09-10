@@ -176,115 +176,135 @@ with st.sidebar:
                                 st.error(f"❌ Ingestion Failed: {status_res.get('error_message')}")
                                 break
 
-    st.markdown("---")
-    st.markdown("### 📂 Ingested Repositories")
     repos_list = fetch_api("/api/repositories")
 
     # If database has zero records on cold start, trigger instant fast-load
     if not isinstance(repos_list, list) or len(repos_list) == 0:
-        seed_res = fetch_api("/api/seed-demos", method="POST")
+        fetch_api("/api/seed-demos", method="POST")
         repos_list = fetch_api("/api/repositories")
 
-    if isinstance(repos_list, list) and repos_list:
-        indexed_repos_app = [r for r in repos_list if r.get("status") == "INDEXED"]
-        pending_repos_app = [r for r in repos_list if r.get("status") != "INDEXED"]
+    indexed_repos_app = [r for r in repos_list if r.get("status") == "INDEXED"] if isinstance(repos_list, list) else []
+    pending_repos_app = [r for r in repos_list if r.get("status") != "INDEXED"] if isinstance(repos_list, list) else []
 
-        if indexed_repos_app:
-            repo_options = {}
-            for r in indexed_repos_app:
-                tag = "⭐ [Demo]" if r.get("is_demo") else "👤 [Session]"
-                label = f"{tag} {r['owner']}/{r['name']} ({r.get('total_files', 0)} files)"
-                repo_options[label] = r["id"]
-            repo_keys = list(repo_options.keys())
+    demo_repos = [r for r in indexed_repos_app if r.get("is_demo") or r.get("owner") in ["encode", "pallets", "psf"]]
+    user_repos = [r for r in indexed_repos_app if not r.get("is_demo") and r.get("owner") not in ["encode", "pallets", "psf"]]
 
-            # Find active index
-            active_idx = 0
-            if st.session_state.selected_repo_id:
-                for i, r_id in enumerate(repo_options.values()):
-                    if r_id == st.session_state.selected_repo_id:
-                        active_idx = i
-                        break
+    # Default selection to first demo repository if not set
+    if not st.session_state.selected_repo_id and demo_repos:
+        st.session_state.selected_repo_id = demo_repos[0]["id"]
 
-            selected_label = st.selectbox(
-                "Select Repository:",
-                options=repo_keys,
-                index=active_idx,
-                help="Choose an ingested repository to inspect and query.",
-            )
-            st.session_state.selected_repo_id = repo_options[selected_label]
-            active_repo = next(r for r in indexed_repos_app if r["id"] == st.session_state.selected_repo_id)
+    # --- SECTION 2: PRE-INDEXED DEMO REPOSITORIES DROPDOWN ---
+    st.markdown("---")
+    st.markdown("### ⭐ Pre-Indexed Demo Repositories")
+    if demo_repos:
+        demo_options = {f"⭐ {r['owner']}/{r['name']} ({r.get('total_files', 0)} files)": r["id"] for r in demo_repos}
+        demo_labels = list(demo_options.keys())
 
-            # Details card with Protected Badge for Demo or Delete Button for Session Repos
+        demo_active_idx = 0
+        for idx, r_id in enumerate(demo_options.values()):
+            if r_id == st.session_state.selected_repo_id:
+                demo_active_idx = idx
+                break
+
+        selected_demo_label = st.selectbox(
+            "Select Demo Repository:",
+            options=demo_labels,
+            index=demo_active_idx,
+            key="demo_repo_selector",
+            help="Curated pre-indexed repositories ready for instant grounded Q&A.",
+        )
+        
+        # When demo selection changes, update active repo
+        chosen_demo_id = demo_options[selected_demo_label]
+        if st.session_state.selected_repo_id not in demo_options.values() or st.session_state.selected_repo_id != chosen_demo_id:
+            if st.button("👉 Switch to this Demo Repo", key="btn_switch_demo", use_container_width=True):
+                st.session_state.selected_repo_id = chosen_demo_id
+                st.session_state.chat_history = []
+                st.rerun()
+
+        # If currently active repo is a demo repo, show details card
+        if st.session_state.selected_repo_id in demo_options.values():
+            active_demo = next((r for r in demo_repos if r["id"] == st.session_state.selected_repo_id), demo_repos[0])
             with st.container(border=True):
-                is_demo_repo = active_repo.get("is_demo", False)
-                if is_demo_repo:
-                    st.markdown(f"**Active:** `{active_repo['owner']}/{active_repo['name']}` ⭐ *(Default Demo)*")
-                    st.caption(f"📁 Files: {active_repo.get('total_files', 0)} | 🔖 Commit: `{active_repo.get('commit_sha', '')[:7]}` | 🛡️ **Protected (Q&A Enabled)**")
-                    st.info("🛡️ This demo repository is pre-indexed and protected from deletion. You can freely query and inspect its architecture.")
-                elif st.session_state.confirm_del_repo_id != active_repo["id"]:
-                    st.markdown(f"**Active:** `{active_repo['owner']}/{active_repo['name']}` 👤 *(User Session)*")
-                    st.caption(f"📁 Files: {active_repo.get('total_files', 0)} | 🔖 Commit: `{active_repo.get('commit_sha', '')[:7]}` | ⚡ Health: `{active_repo.get('runnability_score', '')}`")
-                    if st.button("🗑️ Delete Session Repo", key="btn_del_active_repo", use_container_width=True):
-                        st.session_state.confirm_del_repo_id = active_repo["id"]
+                st.markdown(f"**Active:** `{active_demo['owner']}/{active_demo['name']}` ⭐ *(Default Demo)*")
+                st.caption(f"📁 Files: {active_demo.get('total_files', 0)} | 🔖 Commit: `{active_demo.get('commit_sha', '')[:7]}` | 🛡️ **Protected (Q&A Enabled)**")
+                st.info("🛡️ This demo repository is pre-indexed and protected from deletion. You can freely query its architecture in the main tabs!")
+    else:
+        st.info("⚡ Pre-indexed demo repositories are loading...")
+        if st.button("🚀 Fast-Load Demos", key="btn_load_demos_fast", use_container_width=True):
+            fetch_api("/api/seed-demos", method="POST")
+            st.rerun()
+
+    # --- SECTION 3: USER INGESTED REPOSITORIES DROPDOWN ---
+    st.markdown("---")
+    st.markdown("### 👤 User Ingested Repositories")
+    if user_repos:
+        user_options = {f"👤 {r['owner']}/{r['name']} ({r.get('total_files', 0)} files)": r["id"] for r in user_repos}
+        user_labels = list(user_options.keys())
+
+        user_active_idx = 0
+        for idx, r_id in enumerate(user_options.values()):
+            if r_id == st.session_state.selected_repo_id:
+                user_active_idx = idx
+                break
+
+        selected_user_label = st.selectbox(
+            "Select Ingested Repository:",
+            options=user_labels,
+            index=user_active_idx,
+            key="user_repo_selector",
+            help="Custom repositories ingested during this session.",
+        )
+        
+        chosen_user_id = user_options[selected_user_label]
+        if st.session_state.selected_repo_id != chosen_user_id:
+            if st.button("👉 Switch to this Ingested Repo", key="btn_switch_user", use_container_width=True):
+                st.session_state.selected_repo_id = chosen_user_id
+                st.session_state.chat_history = []
+                st.rerun()
+
+        # If currently active repo is a user repo, show details card and delete button
+        if st.session_state.selected_repo_id in user_options.values():
+            active_user = next((r for r in user_repos if r["id"] == st.session_state.selected_repo_id), user_repos[0])
+            with st.container(border=True):
+                if st.session_state.confirm_del_repo_id != active_user["id"]:
+                    st.markdown(f"**Active:** `{active_user['owner']}/{active_user['name']}` 👤 *(User Session)*")
+                    st.caption(f"📁 Files: {active_user.get('total_files', 0)} | 🔖 Commit: `{active_user.get('commit_sha', '')[:7]}` | ⚡ Health: `{active_user.get('runnability_score', '')}`")
+                    if st.button("🗑️ Delete Session Repo", key="btn_del_active_user", use_container_width=True):
+                        st.session_state.confirm_del_repo_id = active_user["id"]
                         st.rerun()
                 else:
-                    # Windows-style confirmation card inside the active container
-                    st.error(
-                        f"⚠️ **Confirm Permanent Deletion**\n\n"
-                        f"Are you sure you want to permanently delete **`{active_repo['owner']}/{active_repo['name']}`**?\n\n"
-                        f"*This will remove all vector indices, chunks, and metadata from storage.*"
-                    )
+                    st.error(f"⚠️ **Confirm Deletion**\n\nPermanently delete **`{active_user['owner']}/{active_user['name']}`**?")
                     c_yes, c_no = st.columns([1, 1])
                     with c_yes:
-                        if st.button("🗑️ Yes, Delete", key="btn_yes_delete_repo", type="primary", use_container_width=True):
-                            with st.spinner("Deleting repository from storage..."):
-                                del_res = fetch_api(f"/api/repositories/{active_repo['id']}", method="DELETE")
-                                if "error" in del_res:
-                                    st.error(del_res["error"])
-                                else:
-                                    st.session_state.selected_repo_id = None
-                                    st.session_state.confirm_del_repo_id = None
-                                    st.session_state.chat_history = []
-                                    st.toast(f"Successfully deleted {active_repo['owner']}/{active_repo['name']}")
-                                    time.sleep(0.5)
-                                    st.rerun()
-                    with c_no:
-                        if st.button("Cancel", key="btn_cancel_delete_repo", use_container_width=True):
-                            st.session_state.confirm_del_repo_id = None
-                            st.rerun()
-
-            # Global Clean Custom Session Repos Button
-            user_session_repos = [r for r in indexed_repos_app if not r.get("is_demo")]
-            if user_session_repos:
-                if st.button("🧹 Clean All User Session Repos", key="btn_clean_all_session", use_container_width=True):
-                    with st.spinner("Purging temporary session repositories..."):
-                        clean_res = fetch_api("/api/cleanup-session", method="POST")
-                        if "error" in clean_res:
-                            st.error(clean_res["error"])
-                        else:
-                            st.session_state.selected_repo_id = None
+                        if st.button("🗑️ Yes, Delete", key="btn_yes_del_user", type="primary", use_container_width=True):
+                            fetch_api(f"/api/repositories/{active_user['id']}", method="DELETE")
+                            st.session_state.selected_repo_id = demo_repos[0]["id"] if demo_repos else None
                             st.session_state.confirm_del_repo_id = None
                             st.session_state.chat_history = []
-                            st.toast("Temporary user session repositories cleaned!")
-                            time.sleep(0.5)
+                            st.toast("Repository deleted!")
                             st.rerun()
-        else:
-            st.info("⚡ Demo repositories are initializing in the background...")
-            if st.button("🔄 Refresh Repositories", key="btn_manual_refresh", use_container_width=True):
-                st.rerun()
+                    with c_no:
+                        if st.button("Cancel", key="btn_cancel_del_user", use_container_width=True):
+                            st.session_state.confirm_del_repo_id = None
+                            st.rerun()
 
-        # Display in-flight auto-seeding or ingestion jobs
-        if pending_repos_app:
-            st.markdown("---")
-            st.caption("⏳ **In-Flight Background Ingestion:**")
-            for pr in pending_repos_app:
-                st.info(f"⚙️ **{pr['owner']}/{pr['name']}**: `{pr.get('status')}`")
+        if st.button("🧹 Clean All User Session Repos", key="btn_clean_all_session", use_container_width=True):
+            fetch_api("/api/cleanup-session", method="POST")
+            st.session_state.selected_repo_id = demo_repos[0]["id"] if demo_repos else None
+            st.session_state.confirm_del_repo_id = None
+            st.session_state.chat_history = []
+            st.toast("Temporary user session repositories cleaned!")
+            st.rerun()
     else:
-        st.info("⚙️ Initializing repository storage...")
-        if st.button("🚀 Fast-Load Demo Repositories", key="btn_load_demos_manual", use_container_width=True):
-            with st.spinner("Loading pre-indexed repositories..."):
-                fetch_api("/api/seed-demos", method="POST")
-                st.rerun()
+        st.caption("ℹ️ No custom repositories ingested yet. Enter a GitHub repository URL above to ingest one.")
+
+    # In-flight ingestion tracking
+    if pending_repos_app:
+        st.markdown("---")
+        st.caption("⏳ **In-Flight Background Ingestion:**")
+        for pr in pending_repos_app:
+            st.info(f"⚙️ **{pr['owner']}/{pr['name']}**: `{pr.get('status')}`")
 
 
 # --- MAIN CONTENT AREA ---
